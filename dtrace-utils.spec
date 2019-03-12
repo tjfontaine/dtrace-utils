@@ -31,7 +31,7 @@
 %{!?dtrace_kernels: %define dtrace_kernels %{build_kernel} 3.8.13-118.19.4%{?dist}uek}
 %else
 %{!?build_kernel: %define build_kernel 4.14.35-1833%{?dist}uek}
-%{!?dtrace_kernels: %define dtrace_kernels %{build_kernel} 4.1.12-124.9.1%{?dist}uek}
+%{!?dtrace_kernels: %define dtrace_kernels %{build_kernel} %{nil}}
 %endif
 %else
 %ifarch aarch64
