@@ -452,7 +452,6 @@ Pupdate_maps(struct ps_prochandle *P)
 {
 	char mapfile[PATH_MAX];
 	char exefile[PATH_MAX + 10] = "";	/* strlen(" (deleted)") */
-	char mnsfile[PATH_MAX + 10] = "";
 	FILE *fp;
 
 	size_t old_num_mappings = P->num_mappings;
@@ -461,8 +460,6 @@ Pupdate_maps(struct ps_prochandle *P)
 	char *mapaddrname = NULL;
 	char *line = NULL;
 	size_t len;
-
-	int self_fd = -1, ns_fd = -1;
 
 	if (P->info_valid)
 		return;
@@ -496,19 +493,6 @@ Pupdate_maps(struct ps_prochandle *P)
 
 	snprintf(exefile, sizeof (exefile), "%s/%d/exe", procfs_path,
 	    (int)P->pid);
-
-	/* check if a mount ns exists, and enter it */
-	snprintf(mnsfile, sizeof (mnsfile), "%s/%d/ns/mnt", procfs_path,
-	    (int)P->pid);
-
-	if ((ns_fd = open(mnsfile, O_RDONLY)) != -1) {
-		snprintf(mnsfile, sizeof (mnsfile), "%s/self/ns/mnt",
-		    procfs_path);
-		if ((self_fd = open(mnsfile, O_RDONLY)) == -1) {
-			goto err;
-		}
-		setns(ns_fd, CLONE_NEWNS);
-	}
 
 	if ((len = readlink(exefile, exefile, sizeof (exefile))) > 0)
 		exefile[len] = '\0';
@@ -736,10 +720,6 @@ Pupdate_maps(struct ps_prochandle *P)
 	 * requires link map consistency.
 	 */
 
-	/* exit mount ns if entered */
-	if (ns_fd > -1)
-		setns(self_fd, CLONE_NEWNS);
-
 	P->info_valid = 1;
 
 	if (!P->no_dyn)
@@ -751,10 +731,6 @@ Pupdate_maps(struct ps_prochandle *P)
 	return;
 
 err:
-	/* exit mount ns */
-	if (ns_fd > -1)
-		setns(self_fd, CLONE_NEWNS);
-
 	fclose(fp);
 	free(fn);
 	free(mapaddrname);
@@ -1243,12 +1219,16 @@ Pbuild_file_symtab(struct ps_prochandle *P, file_info_t *fptr)
 	}
 
 	if (fd < 0) {
+		const char pname[PATH_MAX + 20] = "";
 		struct stat s;
 
-		if ((stat(fptr->file_pname, &s) < 0) ||
+		snprintf(pname, sizeof (pname), "/%s/%d/root/%s", procfs_path,
+		    (int)P->pid, fptr->file_pname);
+
+		if ((stat(pname, &s) < 0) ||
 		    s.st_dev != fptr->file_dev ||
 		    s.st_ino != fptr->file_inum ||
-		    ((fd = open(fptr->file_pname, O_RDONLY)) < 0)) {
+		    ((fd = open(pname, O_RDONLY)) < 0)) {
 			_dprintf("%i: cannot open %s in non-ptrace()d "
 			    "process: replaced file or open() error\n",
 			    P->pid, fptr->file_pname);
